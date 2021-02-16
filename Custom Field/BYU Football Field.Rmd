@@ -1,0 +1,144 @@
+---
+title: "Custom Football Field"
+output: html_notebook
+---
+
+
+#Read in libraries
+```{r}
+library(png)
+library(ggplot2)
+library(sysfonts)
+library(extrafont)
+library(showtext)
+```
+
+
+#Read in Midfield Logo Image
+```{r}
+#stretch y
+mypngfile <- download.file('https://a.espncdn.com/i/teamlogos/ncaa/500/252.png', destfile = 'mypng.png', mode = 'wb')
+
+#sailor coug
+#mypngfile <- download.file('https://i.pinimg.com/originals/76/fb/5e/76fb5e3a6786607a65e38041268187e8.png', destfile = 'mypng.png', mode = 'wb')
+
+#format image to be usable
+mypng <- readPNG('mypng.png')
+```
+
+
+#Add custom fonts
+```{r}
+#navigate to custom fonts on local machine (regular = )
+font_add(family = "block_ghm", regular = "fonts/Blockletter.otf")
+font_add(family = "block_college", regular = "fonts/CollegeBlock.otf")
+font_add(family = "oldbyu", regular = "fonts/oldbyufont.otf")
+
+showtext_auto()
+```
+
+
+#Set up Data Frames to call for letter/number position on field
+```{r}
+#Letters in Endzones
+HomeLettersDF <- data.frame(x = c(5, 5, 5, 5, 5, 5, 5), y = c(9.87, 15.47, 21.07, 26.67, 32.27, 37.87, 43.47), Letter = c("C", "O", "U", "G", "A", "R", "S"))
+AwayLettersDF <- data.frame(x = c(115, 115, 115), y = c(19.07, 26.67, 34.27), Letter = c("U", "Y", "B"))
+
+#Field Numbers
+FarFieldNumbers <- data.frame(x= c(19.75,30,40,50,60,70,80,90,99.75), y = c(45.83, 45.83, 45.83, 45.83, 45.83, 45.83, 45.83, 45.83, 45.83), Number = c(10,20,30,40,50,40,30,20,10))
+CloseFieldNumbers <- data.frame(x= c(20.25,30,40,50,60,70,80,90,100.25), y = c(7.5,7.5,7.5,7.5,7.5,7.5,7.5,7.5,7.5), Number = c(10,20,30,40,50,40,30,20,10))
+
+#Extra writing on away sideline
+LavellsHouseDF <- data.frame(x = seq(40.65, 79.65, 3), y = rep(-1.5, 14), Letter = c("L", "A", "V", "E", "L", "L", "'", "S", "", "H", "O", "U", "S", "E"))
+
+
+
+#ALTERNATIVE LETTERING for endzones
+#HomeLettersDF = data.frame(x = c(5, 5, 5, 5, 5, 5), y = c(6.37, 9.57, 12.97, 16.77, 21.37, 25.57), Letter = c("G", "I", "V", "E", "E", "M"))
+#HomeLettersDF2 = data.frame(x = c(5, 5, 5, 5), y = c(31.57, 37.17, 42.27, 46.67), Letter = c("H", "E", "L", "L"))
+#AwayLettersDF = data.frame(x = c(115, 115, 115, 115, 115, 115, 115), y = c(11.17, 17.57, 23.57, 29.37, 33.77, 38.17, 43.67), Letter = c("M", "A", "H", "G", "I", "R", "B"))
+```
+
+
+#Create Football Field
+```{r, message = FALSE, warning = FALSE}
+#use ggplot to create field
+
+football_field <- ggplot()+
+  ##These First few geom-rect's set up the field space
+  geom_rect(aes(xmin = -4, xmax = 124, ymin = -4, ymax = 57.33), fill = "#669933", colour = "#FFFFFF", size = .5) + 
+  geom_rect(aes(xmin = 0, xmax = 120, ymin = 0, ymax = 53.33), fill = "#669933", colour = "#FFFFFF", size = .5) +
+  ##These next few set up the boxes around the field
+  geom_rect(aes(xmin = 35, xmax = 85, ymin = -3, ymax = 0), fill = "#FFFFFF", colour = "#FFFFFF") + 
+  geom_rect(aes(xmin = 35, xmax = 85, ymin = 53.33, ymax = 55.33), fill = "#FFFFFF", colour = "#FFFFFF") +
+  geom_rect(aes(xmin = -2, xmax = 35, ymin = -2, ymax = 0), fill = "#0062B8") +
+  geom_rect(aes(xmin = -2, xmax = 0, ymin = -2, ymax = 55.33), fill = "#0062B8") +
+  geom_rect(aes(xmin = -2, xmax = 35, ymin = 53.33, ymax = 55.33), fill = "#0062B8") +
+  geom_rect(aes(xmin = 120, xmax = 122, ymin = -2, ymax = 55.33), fill = "#0062B8") +
+  geom_rect(aes(xmin = 85, xmax = 122, ymin = -2, ymax = 0), fill = "#0062B8") +
+  geom_rect(aes(xmin = 85, xmax = 122, ymin = 53.33, ymax = 55.33), fill = "#0062B8") +
+  ##These are the yardmarkers
+  geom_segment(aes(x = 10, xend = 10, y = 0, yend = 53.33), colour = "#FFFFFF") + 
+  geom_segment(aes(x = 15, xend = 15, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  ##These two are the blue lines around the 20 signifying the Red Zone
+  geom_segment(aes(x = 29.8, xend = 29.8, y = 0, yend = 53.33), colour = "#0062B8") + 
+  geom_segment(aes(x = 30.2, xend = 30.2, y = 0, yend = 53.33), colour = "#0062B8") +
+  geom_segment(aes(x = 20, xend = 20, y = 0, yend = 53.33), colour = "#FFFFFF") + 
+  geom_segment(aes(x = 25, xend = 25, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 30, xend = 30, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 35, xend = 35, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 40, xend = 40, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 45, xend = 45, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 50, xend = 50, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 55, xend = 55, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 60, xend = 60, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 65, xend = 65, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 70, xend = 70, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 75, xend = 75, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 80, xend = 80, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 85, xend = 85, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  ##These two are the blue lines around the 20 signifying the Red Zone
+  geom_segment(aes(x = 89.8, xend = 89.8, y = 0, yend = 53.33), colour = "#0062B8") + 
+  geom_segment(aes(x = 90.2, xend = 90.2, y = 0, yend = 53.33), colour = "#0062B8") +
+  geom_segment(aes(x = 90, xend = 90, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 95, xend = 95, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 100, xend = 100, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 105, xend = 105, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 110, xend = 110, y = 0, yend = 53.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = 122, xend = 122, y = -2, yend = 55.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = -2, xend = -2, y = -2, yend = 55.33), colour = "#FFFFFF") +
+  geom_segment(aes(x = -2, xend = 122, y = -2, yend = -2), colour = "#FFFFFF") +
+  geom_segment(aes(x = -2, xend = 122, y = 55.33, yend = 55.33), colour = "#FFFFFF") +
+  ##These are the hashes
+  geom_segment(aes(x = 10, xend = 110, y = 20, yend = 20), colour = "#FFFFFF", linetype = "dashed") + 
+  geom_segment(aes(x = 10, xend = 110, y = 33.33, yend = 33.33), colour = "#FFFFFF", linetype = "dashed") +
+  geom_segment(aes(x = 10, xend = 110, y = .5, yend = .5), colour = "#FFFFFF", linetype = "dashed") +
+  geom_segment(aes(x = 10, xend = 110, y = 52.83, yend = 52.83), colour = "#FFFFFF", linetype = "dashed") +
+  ## The next two lines are the FG Posts
+  geom_segment(aes(x = 0, xend = 0, y=23.57, yend = 29.77), colour = "yellow", size = 1.3) + 
+  geom_segment(aes(x = 120, xend = 120, y = 23.57, yend = 29.77), colour = "yellow", size = 1.3) +
+  ##These are the Numbers on the field
+  geom_text(data = CloseFieldNumbers, mapping = aes(x,y, label = Number), colour = "#FFFFFF", size = 28, family = "oldbyu") +
+  geom_text(data = FarFieldNumbers, mapping = aes(x, y, label = Number), colour = "#FFFFFF", size = 28, family = "oldbyu", angle = 180) +
+  ##This is where you add the Midfield Logo
+  annotation_raster(mypng, ymin = 18, ymax = 35.5, xmin = 50, xmax = 70) +
+  ##Add the extra pt conversion mark
+  geom_segment(aes(x = 13, xend = 13, y = 26.33, yend = 27), colour = "#FFFFFF") + 
+  geom_segment(aes(x = 107, xend = 107, y = 26.33, yend = 27), colour = "#FFFFFF") +
+  #for alternative endzone lettering
+  #geom_text(data = HomeLettersDF, aes(x, y, label = Letter), colour = "#FFFFFF", family = "block_ghb", size = 55, angle = 90) + 
+  #geom_text(data = HomeLettersDF2, aes(x, y, label = Letter), colour = "#FFFFFF", family = "block_ghb", size = 70, angle = 90) +
+  #extra lines in endzone
+  #geom_segment(aes(x = 1.5, xend = 1.5, y = 4.5, yend = 27.5), colour = "#FFFFFF") + 
+  #geom_segment(aes(x = 8.5, xend = 8.5, y = 4.5, yend = 27.5), colour = "#FFFFFF") +
+  ##Add wording to endzones
+  geom_text(data = HomeLettersDF, aes(x, y, label = Letter), colour = "#FFFFFF", family = "block_ghb", size = 70, angle = 90) + 
+  geom_text(data = AwayLettersDF, aes(x, y, label = Letter), colour = "#FFFFFF", family = "block_ghb", size = 70, angle = 270) + 
+  geom_text(data = LavellsHouseDF, aes(x, y, label = Letter), colour = "#0062B8", family = "block_ghb", size = 20) +
+  ##This removes all of the exterior lines from a typical ggplot
+  theme(rect = element_blank(), 
+        line = element_blank(),
+        text = element_blank()) +
+  ggsave("BYU Football Field  .png", width = 12.8, height = 6.13)
+```
+
