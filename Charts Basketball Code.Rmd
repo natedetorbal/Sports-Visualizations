@@ -1,0 +1,148 @@
+---
+title: "Charts Basketball Code"
+output: html_document
+---
+
+#load packages
+```{r, setup}
+library(tidyverse)
+library(ggplot2)
+
+#get date
+today <- Sys.Date()
+today <- format(today, format="%m-%d-%Y")
+```
+
+# BAR CHARTS
+
+## BYU Leading Scorers Over Time -- see 'BYU Basketball Top 3 Leading Scorers Over Time.png" for example
+```{r}
+#read in data
+lead_scorers <- read.csv("BYU leading scorers 2003-2021 long.csv")
+
+#set factor levels
+lead_scorers$stat <- factor(lead_scorers$stat, levels = c("top_scorer", "second_scorer", "third_scorer"))
+
+#plot leadings scorers over time
+ggplot(data = lead_scorers %>% filter(season >= 2010), mapping = aes(x = season, y = pts, fill = stat)) +
+  scale_fill_manual(values = c("royal blue", "navy", "grey"), 
+                    labels = c("Top Scorer", "Second Scorer", "Third Scorer"),
+                    name = "") +
+  geom_col(position = "dodge", color = "black", width = .7) +
+  scale_x_continuous(breaks = seq(2010, 2021, 1)) +
+  labs(title = "BYU Basketball Leading Scorers",
+       subtitle = paste("Top 3 Leading Scorers per Season  |  Since 2010  | Updated", today),
+       x = "Season", 
+       y = "Points Scored per Game",
+       caption = "figure: @ndetorbal  |  data: byucougars.com") +
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_line(colour = "grey", 
+                                          size=0.25),
+        panel.grid.major.y = element_line(colour = "grey", 
+                                          size=0.25),
+        plot.title = element_text(face = "bold", size = 14),
+        text = element_text(size = 10)) +
+  ggsave(filename = paste("BYU Basketball Top 3 Leading Scorers Over Time Updtd ", today, ".png", sep = ""),
+         height = 6,
+         width = 12)
+```
+
+
+# LINE GRAPHS
+
+#kenpom last five years with BYU rivals
+```{r}
+#read in data
+last_five <- read.csv("kenpom byu rivals rankings last five years.csv")
+
+#get logo url's and add to dataframe
+last_five <- inner_join(last_five, read.csv("kenpom byu rivals rankings last five years logo.csv"))
+
+#after looking at the plot, drop Pepperdine and San Fran becuase it makes the plot too tall
+last_five <- last_five %>% filter(School != "Pepperdine" & School != "San Fransisco", Overall_Ranking < 150)
+
+
+#plot kenpom rankings over time
+ggplot(data = last_five, mapping = aes(x = Year, y = Overall_Ranking)) +
+  geom_line(data = last_five %>% filter(School == "Utah"), mapping = aes(x = Year, y = Overall_Ranking), color = "red", size = .7)+
+  geom_line(data = last_five %>% filter(School == "UVU" & Overall_Ranking < 200), mapping = aes(x = Year, y = Overall_Ranking), color = "forest green", size = .7)+
+  geom_line(data = last_five %>% filter(School == "St Marys"), mapping = aes(x = Year, y = Overall_Ranking), color = "grey", size = .7)+
+  geom_line(data = last_five %>% filter(School == "Utah State"), mapping = aes(x = Year, y = Overall_Ranking), color = "navy blue", size = .7) +
+  geom_line(data = last_five %>% filter(School == "Boise State"), mapping = aes(x = Year, y = Overall_Ranking), color = "orange", size = .7) +
+  geom_line(data = last_five %>% filter(School == "Gonzaga"), mapping = aes(x = Year, y = Overall_Ranking), color = "navy blue", size = .7) +
+  geom_line(data = last_five %>% filter(School == "BYU"), mapping = aes(x = Year, y = Overall_Ranking), color = "royal blue", size = .7) +
+  geom_image(data = last_five %>% filter(Year == 2021 | Year == 2017), mapping = aes(x = Year, y = Overall_Ranking),
+             image = (last_five %>% filter(Year == 2021 | Year == 2017))$logo) +
+  labs(title = "KenPom Rankings Last Five Years",
+       subtitle = paste("BYU and local/conference rivals  | Through ", today, "  |  Rankings < 150", sep = ""),
+       x = "\nYear",
+       y = "KenPom Ranking", 
+       caption = "figure: @ndetorbal  |  data: @kenpomeroy") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", 
+                                          size=0.25),
+        plot.caption.position = "plot") +
+  scale_y_reverse(breaks = c(1, 25, 50, 75, 100, 125, 150)) +
+  ggsave(paste("KenPom Rankings Last Five Years (one logo) Through", today, ".png", sep = ""),
+         height = 8,
+         width = 10)
+```
+
+
+# KenPom over time by week -- 2019/2020 vs 2020/2021
+```{r}
+kp_week <- read.csv("KenPom over time 2-7-2021.csv")
+
+#plot kenpom overall rankings over time by week comparing last season to this season
+ggplot(data = kp_week, mapping = aes(x = Week, y = Rank, color = Year)) +
+  scale_color_manual(values = c("royal blue", "navy")) +
+  geom_point(size = 1.7) +
+  geom_line(size = 1.2) +
+  scale_y_reverse(breaks = c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90)) +
+  labs(title = "BYU KenPom Rankings By Time", 
+       subtitle = paste("2019/20 and 2020/21  |  Updated Through ", today, sep = ""),
+       x = "Week", 
+       y = "Overall AdjEM Rank\n",
+       caption = "figure: @ndetorbal data: @kenpomeroy") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold")) +
+  ggsave(filename = "BYU KenPom Rankings over Time (Updated Through 2-7-21).png",
+         height = 6,
+         width = 10)
+
+#colors for below plot
+colors <- c("Overall" = "black", "Offensive Ranking" = "grey51", "Defensive Ranking" = "royal blue")  
+
+#plot 2020/2021 season kenpom overall rankings, o rankings, and d rankings through the season
+ggplot(data = kp_week %>% filter(Year == "2020/2021")) +
+  scale_color_manual(values = colors, name = "") +
+  geom_point(mapping = aes(x = Week, y = Rank, color = "Overall"), size = 1.5) +
+  geom_line(mapping = aes(x = Week, y = Rank, color = "Overall"), size = 1.2) +
+  geom_point(mapping = aes(x = Week, y = O, color = "Offensive Ranking"), size = 1.5) +
+  geom_line(mapping = aes(x = Week, y = O, color = "Offensive Ranking"), size = 1.2) +
+  geom_point(mapping = aes(x = Week, y = D, color = "Defensive Ranking"), size = 1.5) +
+  geom_line(mapping = aes(x = Week, y = D, color = "Defensive Ranking"), size = 1.2) +
+  scale_y_reverse(breaks = c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90)) +
+  scale_x_continuous(breaks = seq(1, 16, 2)) +
+  labs(title = "BYU KenPom Rankings By Week", 
+       subtitle = paste("2020/21 Season  |  Updated Through ", today, sep = ""),
+       x = "Week", 
+       y = "Rank\n",
+       caption = "figure: @ndetorbal data: @kenpomeroy") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold")) +
+  ggsave(filename = "BYU KenPom 3 Efficiency Rankings (Updated through 2-7-21).png",
+         height = 6, 
+         width = 10)
+```
+
+
+
+
+
