@@ -52,7 +52,7 @@ ggplot(data = lead_scorers %>% filter(season >= 2010), mapping = aes(x = season,
 
 # LINE GRAPHS
 
-#kenpom last five years with BYU rivals
+#kenpom last five years with BYU rivals -- see 'KenPom Rankings Last Five Years Through02-17-2021.png' to see example
 ```{r}
 #read in data
 last_five <- read.csv("kenpom byu rivals rankings last five years.csv")
@@ -95,7 +95,7 @@ ggplot(data = last_five, mapping = aes(x = Year, y = Overall_Ranking)) +
 ```
 
 
-# KenPom over time by week -- 2019/2020 vs 2020/2021
+# KenPom over time by week (2019/2020 vs 2020/2021) -- see 'BYU KenPom Rankings over Time (Updated Through 2-7-21).png' for example
 ```{r}
 kp_week <- read.csv("KenPom over time 2-7-2021.csv")
 
@@ -143,6 +143,33 @@ ggplot(data = kp_week %>% filter(Year == "2020/2021")) +
 ```
 
 
+# SCATTER PLOTS
 
+## BYU Opponent KenPom AdjO vs AdjD -- see 'BYU Basktball Opponent KenPom O and D Rankings 02-17-2020.png' for example
+```{r}
+#read in data
+opponent_rank <- read.csv('BYU Opponent KenPom O and D Rankings.csv')
+#read in logos
+opponent_logos <- read.csv('BYU Opponent team logos.csv')
+
+#add logos to dataframe
+opponent_rank <- inner_join(opponent_rank, opponent_logos, by = "Team")
+
+#plot kenpom offensive and defensive rankings for all BYU opponents
+ggplot(data = opponent_rank, mapping = aes(x = AdjO, y = AdjD)) +
+  geom_image(image = opponent_rank$url, asp = 16/9) +
+  labs(title = "BYU Opponents KenPom Offensive and Defensive Rankings", 
+       subtitle = paste("Updated Through", today),
+       caption = "figure: @ndetorbal  |  data: @kenpomeroy", 
+       x = "AdjO Rating", 
+       y = "AdjD Rating") +
+  theme_bw() +
+  scale_y_reverse() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        text = element_text(size = 10)) +
+  ggsave(filename = paste("BYU Opponent KenPom O and D Rankings ", today, ".png", sep = ""),
+         height = 6,
+         width = 10)
+```
 
 
