@@ -1,0 +1,496 @@
+---
+title: "Weekly Football Charts"
+output: html_document
+---
+
+## Set up packages, get data
+```{r}
+#install.packages("mgcv")
+easypackages::libraries('tidyverse', 'ggimage', 'gt', 'reactable', 'webshot', 'devtools', 'mgvc', 'ggplot2')
+
+devtools::install_github(repo = "meysubb/cfbscrapR", force = TRUE)
+
+library(cfbscrapR)
+
+#get logos
+cfblogos <- read.csv("https://raw.githubusercontent.com/spfleming/CFB/master/logos.csv") %>% select(school, logo, color)
+```
+
+
+## Get play by play data
+```{r}
+#week is the max week you want to include
+week = 16
+pbp_2020 <- cfbscrapR::cfb_pbp_data(year=2020, season_type = "regular", epa_wpa = TRUE, week = 1)
+
+#loop through weeks and get data -- this takes a while to run
+for(i in 2:week)
+{
+  pbp_2020 <- rbind(pbp_2020, cfbscrapR::cfb_pbp_data(year=2020, season_type = "regular", epa_wpa = TRUE, week = i))
+  #print week to check progress
+  print(i)
+}
+
+#get game level data
+games_20 <- cfbscrapR::cfb_game_info(2020)
+
+#join dataframes
+pbp_2020 <- left_join(pbp_2020, games_20, by = c("game_id"))
+```
+
+
+## Add a few variables -- garbage time, success rate, defensive success rate
+```{r}
+#ADD GARBAGE TIME FILTERS AND SUCCESS 
+pbp_2020 <- pbp_2020 %>%  
+                    #filter(!is.na(home_conference) & !is.na(away_conference)) %>% 
+                    mutate(abs_diff = abs(score_diff),
+         garbage = ifelse((period == 1) & (abs_diff > 38), 1,
+                   ifelse((period == 2) & (abs_diff > 38), 1,
+                   ifelse((period == 3) & (abs_diff > 24), 1,
+                   ifelse((period == 4) & (abs_diff > 17), 1, 0)))),
+         success = #ifelse((down == 1) & (yards_gained > (.5*distance)), 1, #Used by Football Outsiders
+                   #ifelse((down == 2) & (yards_gained > (.7*distance)), 1,
+                   ifelse((down == 1) & (yards_gained >= (.4*distance)), 1, #Used by SportsSource Analytics
+                   ifelse((down == 2) & (yards_gained >= (.5*distance)), 1,
+                   ifelse(((down == 3) | (down == 4)) & (yards_gained >=distance), 1, 0))),
+         def_success = ifelse(success == 1, 0, 1))
+
+#filter out FCS offenses
+pbp_2020 %>%  filter(!is.na(offense_conference))
+```
+
+
+#TABLES
+
+## Basic Game Recap Tables -- See 'BYU vs Navy Offensive Breakdown.png' to see result of table
+```{r}
+#basic offensive breakdown
+o_tab <- pbp_2020 %>% filter(offense_play == "BYU", 
+                    play_type != "Kickoff", 
+                    play_type != "Punt", 
+                    play_type != "Penalty", 
+                    play_type != "Timeout", 
+                    play_type != "Field Goal Good", 
+                    week == week) %>%
+  group_by(down) %>% 
+  summarise("EPA_play" = mean(EPA, na.rm = TRUE), 
+            "yds_per_play" = mean(yards_gained, na.rm = TRUE), 
+            "success" = mean(success, na.rm = TRUE), 
+            "ytg" = mean(distance, na.rm = TRUE),
+            "run_perc" = 100*mean(rush, na.rm = TRUE),
+            "pass_perc" = 100*mean(pass, na.rm = TRUE),
+            "num_plays" = n())
+
+#basic defensive breakdown
+(d_tab <- pbp_2020 %>% filter(defense_play == "BYU", 
+                    play_type != "Kickoff", 
+                    play_type != "Punt", 
+                    play_type != "Penalty", 
+                    play_type != "Timeout", 
+                    play_type != "Field Goal Good", 
+                    week == week) %>%
+  group_by(down) %>% 
+  summarise("EPA_play" = -1 * mean(EPA, na.rm = TRUE), 
+            "yds_per_play" = mean(yards_gained, na.rm = TRUE), 
+            "success" = 1 - mean(success, na.rm = TRUE), 
+            "ytg" = mean(distance, na.rm = TRUE),
+            "run_perc" = 100 * mean(rush, na.rm = TRUE),
+            "pass_perc" = 100 * mean(pass, na.rm = TRUE),
+            "num_plays" = n()))
+
+
+
+
+# # #  O F F E N S I V E    T A B L E
+
+#flip data frame and get proper data
+navy_game_table <- data.frame("Stat" = unlist(names(o_tab)), "First Down" = unlist(o_tab[1,][1:8]), "Second Down" = unlist(o_tab[2,][1:8]), "Third Down" = unlist(o_tab[3,][1:8]), "Fourth Down" = unlist(o_tab[4,][1:8]))
+
+#format dataframe
+navy_game_table <- data.frame("Stat" = c("Down", "EPA Per Play", "Yards Per Play", "Success Rate", "Avg Yards to Go", "Run Play %", "Pass Play %", "Number of Plays"), "First" = round(navy_game_table$First.Down, 2), "Second" = round(navy_game_table$Second.Down, 2), "Third" = round(navy_game_table$Third.Down, 2), "Fourth" = round(navy_game_table$Fourth.Down, 2))[-1,]
+
+#create table using gt() package
+gt(navy_game_table) %>%
+  tab_header(title = md("**BYU vs Navy**"),
+             subtitle = "BYU Offensive Breakdown") %>%
+  #tab_source_note("figure: @ndetorbal  |  Data: @CFB_Data via @cfbscrapR") %>%
+  tab_spanner(label = "Down", columns = matches("First|Second|Third|Fourth")) %>%
+  gtsave(filename = "BYU vs Navy Offensive Breakdown.png")
+
+
+
+# # #  D E F E N S I V E    T A B L E
+#same as above but for the defense
+
+navy_game_table_d <- data.frame("Stat" = unlist(names(d_tab)), "First Down" = unlist(d_tab[1,][1:8]), "Second Down" = unlist(d_tab[2,][1:8]), "Third Down" = unlist(d_tab[3,][1:8]), "Fourth Down" = unlist(d_tab[4,][1:8]))
+
+navy_game_table_d <- data.frame("Stat" = c("Down", "EPA Per Play", "Yards Per Play", "Success Rate", "Avg Yards to Go", "Run Play %", "Pass Play %", "Number of Plays"), "First" = round(navy_game_table_d$First.Down, 2), "Second" = round(navy_game_table_d$Second.Down, 2), "Third" = round(navy_game_table_d$Third.Down, 2), "Fourth" = round(navy_game_table_d$Fourth.Down, 2))[-1,]
+
+gt(navy_game_table_d) %>%
+  tab_header(title = md("**BYU vs Navy**"),
+             subtitle = "BYU Defensive Breakdown") %>%
+  #tab_source_note("figure: @ndetorbal  |  Data: @CFB_Data via @cfbscrapR") %>%
+  tab_spanner(label = "Down", columns = matches("First|Second|Third|Fourth")) %>%
+  gtsave(filename = "BYU vs Navy Defensive Breakdown.png")
+
+```
+
+
+# SCATTERPLOTS
+
+## All FBS Offensive vs Defensive Success Rate chart -- see 'Offensive vs Defensive EPA-play Week 16 .png' for example
+```{r}
+#get data for the chart
+epa_success <- inner_join(
+  #offensive stats
+  pbp_2020 %>% filter(garbage == 0, rush == 1 | pass == 1, !is.na(offense_conference)) %>% 
+    group_by(offense_play) %>% summarise("Off_EPA" = mean(EPA, na.rm = TRUE), 
+                                         "Off_Success" = mean(success, na.rm = TRUE)) %>%
+    arrange(desc(Off_Success)),
+  #defensive stats
+  pbp_2020 %>% filter(garbage == 0, rush == 1 | pass == 1, !is.na(defense_conference)) %>% 
+    group_by(defense_play) %>% summarise("Def_EPA" = mean(EPA, na.rm = TRUE), 
+                                         "Def_Success" = 1 - mean(success, na.rm = TRUE)) %>%
+    arrange(desc(Def_Success)),
+  by = c("offense_play" = "defense_play"))
+
+#join with logos
+epa_success <- inner_join(epa_success, cfblogos, by = c("offense_play" = "school"))
+
+#plot success rates
+ggplot(data = epa_success, mapping = aes(x = 100 * Off_Success, y = 100 * Def_Success)) +
+  geom_hline(yintercept = 100 * mean(epa_success$Def_Success), color = "black", linetype = "dashed") +
+  geom_vline(xintercept = 100 * mean(epa_success$Off_Success), color = "black", linetype = "dashed") +
+  geom_image(image = epa_success$logo, asp = 16/9) +
+  labs(title = "Offensive vs Defensive Success Rates",
+       subtitle = paste("Through Week ", week, "  |  2020 Season  |  Garbage Time Filtered", sep = ""),
+       caption = "figure: @ndetorbal | data: @CFB_Data via @cfbscrapR",
+       x = "Offensive Success Rate (%)",
+       y = "Defensive Success Rate (%)") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        plot.caption.position = "plot") +
+  scale_y_continuous(breaks = 100 * c(0, .1, .2, .3, .4, .5, .6, .7, .8, 1)) +
+  scale_x_continuous(breaks = 100 * c(0, .1, .2, .3, .4, .5, .6, .7, .8, 1)) +
+  ggsave(filename = paste("Offensive vs Defensive Success Rates Week ", week, ".png"),
+         height = 5,
+         width = 7,
+         dpi = 300)
+
+##creating the epa/play plots are the same just using Off_EPA and Def_EPA instead
+```
+
+
+## ESPN FPI Rankings chart -- see 'Week 16 ESPN FPI Rankings.png' for example
+```{r}
+#get ESPN fpi rankings data
+fpi <- cfbscrapR::cfb_ratings_fpi(2020)
+
+#change types to numeric
+fpi$games <- as.numeric(fpi$proj_w) + as.numeric(fpi$proj_l)
+fpi$proj_perc <- as.numeric(fpi$proj_w) / as.numeric(fpi$games)
+fpi$fpi <- as.numeric(fpi$fpi)
+
+#add logos to dataframe
+fpi <- inner_join(fpi, cfblogos, by = c("name" = "school"))
+
+#fpi plot
+ggplot(data = fpi, mapping = aes(x = proj_perc, y =fpi)) +
+  geom_vline(xintercept = mean(fpi$proj_perc), color = "black", linetype = "dashed") +
+  geom_hline(yintercept = mean(fpi$fpi), color = "black", linetype = "dashed") +
+  geom_image(image = fpi$logo, asp = 16/9) +
+  theme_bw() +
+  labs(x = "Projected Win Percentage",
+       y = "ESPN FPI Rating",
+       title = "ESPN FPI Rankings",
+       subtitle = paste("Week ", week, sep = ""),
+       caption = "figure: @ndetorbal | data: @CFB_Data via @cfbscrapR") +
+  scale_x_continuous(breaks = seq(from = 0, to = 1, by = .1)) +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        plot.caption.position = "plot") +
+  ggsave(filename = paste("Week ", week, " ESPN FPI Rankings.png"),
+         height = 6,
+         width = 9,
+         dpi = 300)
+```
+
+
+# BAR CHARTS
+
+## Percent of Conversion by Down -- see Percent of First Downs Gained by Down Week 16.png'
+```{r}
+conversions_by_down <- pbp_2020 %>% filter(!is.na(offense_conference)) %>% 
+  select(offense_play, defense_play, play_type, play_text, down, distance, yards_to_goal, yards_gained, EPA, wpa, distance_end, down_end, rush, pass, turnover, week, half, Goal_To_Go, week)
+
+###Non-penalty first downs -- construct and add on to data frame by each down
+conversions_by_down_count <- inner_join(
+conversions_by_down %>% filter(down_end == 1, 
+                               Goal_To_Go == FALSE,
+                               (rush == 1 | pass == 1),
+                               turnover == FALSE,
+                               yards_gained >= distance) %>% group_by(offense_play) %>% summarise(total_count = n()),
+conversions_by_down %>% filter(down_end == 1, 
+                               Goal_To_Go == FALSE,
+                               (rush == 1 | pass == 1),
+                               turnover == FALSE,
+                               yards_gained >= distance,
+                               down == 1) %>% group_by(offense_play) %>% summarise(first_down = n()),
+by = "offense_play")
+
+conversions_by_down_count <- left_join(conversions_by_down_count, 
+           conversions_by_down %>% filter(down_end == 1, 
+                               Goal_To_Go == FALSE,
+                               (rush == 1 | pass == 1),
+                               turnover == FALSE,
+                               yards_gained >= distance,
+                               down == 2) %>% group_by(offense_play) %>% summarise(second_down = n()),
+by = "offense_play")
+
+conversions_by_down_count <- left_join(conversions_by_down_count, 
+           conversions_by_down %>% filter(down_end == 1, 
+                               Goal_To_Go == FALSE,
+                               (rush == 1 | pass == 1),
+                               turnover == FALSE,
+                               yards_gained >= distance,
+                               down == 3) %>% group_by(offense_play) %>% summarise(third_down = n()),
+by = "offense_play")
+
+conversions_by_down_count <- left_join(conversions_by_down_count, 
+           conversions_by_down %>% filter(down_end == 1, 
+                               Goal_To_Go == FALSE,
+                               (rush == 1 | pass == 1),
+                               turnover == FALSE,
+                               yards_gained >= distance,
+                               down == 4) %>% group_by(offense_play) %>% summarise(fourth_down = n()),
+by = "offense_play")
+
+#add percent columns
+conversions_by_down_count$fourth_perc <- conversions_by_down_count$fourth_down / conversions_by_down_count$total_count
+conversions_by_down_count$third_perc <- conversions_by_down_count$third_down / conversions_by_down_count$total_count
+conversions_by_down_count$second_perc <- conversions_by_down_count$second_down / conversions_by_down_count$total_count
+conversions_by_down_count$first_perc <- conversions_by_down_count$first_down / conversions_by_down_count$total_count
+
+#replace NA's with zero
+conversions_by_down_count[is.na(conversions_by_down_count)] <- 0
+
+#add early down column
+conversions_by_down_count$early_downs <- conversions_by_down_count$first_perc + conversions_by_down_count$second_perc
+
+#add logos to dataframe
+conversions_by_down_count <- inner_join(conversions_by_down_count, cfblogos, by = c("offense_play" = "school"))
+
+#convert from wide to long format
+library(data.table)
+long_conversions_by_down <- melt(setDT(conversions_by_down_count %>% 
+                                         select(offense_play, first_perc, second_perc, third_perc, fourth_perc)),
+                                 id.vars = "offense_play",
+                                 variable.name = "percent") %>% arrange(offense_play)
+
+#factor schools
+long_conversions_by_down$offense_play <- factor(long_conversions_by_down$offense_play, (conversions_by_down_count %>% arrange(early_downs, first_perc, second_perc, third_perc, fourth_perc))$offense_play )
+
+#plot first down percentages
+ggplot(filter(long_conversions_by_down), mapping = aes(x = offense_play, y = value)) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.63, size = 18),
+        plot.subtitle = element_text(hjust = 0.65),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        plot.caption.position = "plot",
+        legend.position = "top",
+        plot.title.position =  "plot") +
+  geom_col(aes(fill = forcats::fct_rev(percent))) +
+  labs(x = "", y = "Percent of First Downs Gained", 
+       title = "Percent of First Downs Gained by Down",
+       subtitle = paste("Through Week ", week, "  |  Non-Penalty First Downs  |  Sorted by Early Downs Percent", sep = ""),
+       caption = "figure: @ndetorbal | data: @CFB_Data via @cfbscrapR") +
+  scale_fill_discrete(name = "Down:  ", labels = c("4th", "3rd   ", "2nd   ", "1st   ")) +
+  coord_flip() +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  ggsave(filename = "Percent of First Downs Gained by Down.png",
+         height = 16,
+         width = 8)
+```
+
+
+## RUSH PERCENTAGES BY POSITION -- see 'Navy 2019 Rushing Production Percentages by Position.png' to see example
+```{r}
+navy_rush_pos<- read.csv("Navy 2019 Rush Percentages by Position.csv")
+
+#get rid of total row and keep just percentages
+navy_rush_pos <- navy_rush_pos[1:4,]
+navy_rush_pos <- select(navy_rush_pos, Position, Yards_Perc, Carries_Perc, TD_Perc)
+
+#flip formatting
+navy_rush_perc <- data.frame("Position" = rep(navy_rush_pos$Position,3), 
+                             "Percent" = c(navy_rush_pos$Yards_Perc, 
+                                           navy_rush_pos$Carries_Perc, 
+                                           navy_rush_pos$TD_Perc), 
+                             "Stat" = c(rep(c("Yards"),4), 
+                                        rep(c("Carries"),4),
+                                        rep(c("TD"),4)))
+
+#change factor levels
+navy_rush_perc$Position <- factor(navy_rush_perc$Position, c("QB", "FB", "SB", "WR")) 
+navy_rush_perc$Stat <- factor(navy_rush_perc$Stat, c("Carries", "Yards", "TD"))
+
+#bar chart of rushing production % per position
+ggplot(data = navy_rush_perc, mapping = aes(x = Stat, y = Percent, fill = Position)) +
+  scale_fill_manual(values = c("navy blue", "lightgoldenrod3", "grey51", "grey19")) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  theme_bw() +
+  labs(title = "Navy 2019 Rushing Production Percentages by Position",
+       subtitle = "Which position has the most production?",
+       caption = "figure: @ndetorbal  |  data: navysports.com",
+       x = "",
+       y = "Production Percentage") +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", 
+                                          size=0.25),
+        plot.title = element_text(face = "bold"),
+        plot.caption.position = "plot") +
+  scale_y_continuous(breaks = seq(from = 0, to = 50, by = 5)) +
+  ggsave(filename = "Navy 2019 Rushing Production Percentages by Position.png",
+         height = 5,
+         width = 8,
+         dpi = 300)
+```
+
+
+# TREND GRAPH
+
+## SUCCESS RATES PER FIELD POSITION -- See '2019 Offensive Success Rates (BYUvNavy.png)' to see example
+```{r}
+#Notice the data for these charts are from the 2019 cfb season, where all the previous charts used 2020 data. 
+#You can use the cfbscrapR functions to load this data the same way as listed above just changing the year to 2019
+
+
+# # # OFFENSIVE SUCCESS RATES
+
+
+#fbs rates
+fbs_field_pos_success_rates <- pbp_2019_garbage_filtered %>% group_by(yards_to_goal) %>% 
+                                                              summarise("success" = mean(success, na.rm = TRUE)) %>% 
+                                                              filter(yards_to_goal > 2, yards_to_goal < 96)
+#byu rates
+byu_success_field_pos <- pbp_byu_garbage_filtered %>% group_by(yards_to_goal) %>% 
+                                                                summarise("success" = mean(success, na.rm = TRUE)) %>% 
+                                                                filter(yards_to_goal > 2, yards_to_goal < 96)
+#navy rates
+navy_success_field_pos <- pbp_2019_garbage_filtered %>% filter(offense_play == "Navy") %>% 
+                                                                group_by(yards_to_goal) %>% 
+                                                                summarise("success" = mean(success, na.rm = TRUE)) %>% 
+                                                                filter(yards_to_goal > 2, yards_to_goal < 96)
+
+#add 10 yard line to navy rates
+navy_success_field_pos <- rbind(navy_success_field_pos[1:7,], c(10, 0.0000), navy_success_field_pos[8:92,])
+#data frame of all 3 sets of rates
+byu_navy_success_field_pos <- data.frame("yards_to_goal" = fbs_field_pos_success_rates$yards_to_goal, 
+                                         "fbs_success" = fbs_field_pos_success_rates$success, 
+                                         "byu_success" = byu_success_field_pos$success,
+                                         "navy_success" = navy_success_field_pos$success)
+
+#colors for graph
+byu_navy_success_field_pos_colors <- c("FBS Average" = "grey51", "BYU" = "royal blue", "Navy" = "lightgoldenrod3")
+
+#plot success rates per field position -- OFFENSE
+ggplot(data = byu_navy_success_field_pos, color = byu_navy_success_field_pos_colors) +
+  scale_color_manual(values = byu_navy_success_field_pos_colors) +
+  geom_smooth(mapping = aes(x = yards_to_goal, y = fbs_success, color = "FBS Average"), se = FALSE, size = 1.5) +
+  geom_smooth(mapping = aes(x = yards_to_goal, y = byu_success, color = "BYU"), se = FALSE, size = 1.5) +
+  geom_smooth(mapping = aes(x = yards_to_goal, y = navy_success, color = "Navy"), se = FALSE, size = 1.5) +
+  theme_bw() +
+  labs(x = "Yards To Goal",
+       y = "Average Success Rate",
+       title = "2019 Offensive Success Rates by Field Position",
+       caption = "Garbage Time Filtered  |  figure: @ndetorbal  |  data: @CFB_Data via @cfbscrapR",
+       subtitle = "Success Rate: Gaining 40%+ of required yards on 1st down;\n50%+ of required yards on 2nd down; conversion on 3rd/4th down",
+       color = "") +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", 
+                                          size=0.25),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", 
+                                          size=0.25),
+        
+        plot.caption.position = "plot") +
+  scale_x_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
+  ggsave(filename = "2019 Offensive Success Rates (BYUvNavy).png",
+         height = 5,
+         width = 9,
+         dpi = 300)
+
+
+# # # DEFENSIVE SUCCESS RATES PER FIELD POSITION
+
+
+fbs_def_success_rates <- pbp_2019_garbage_filtered %>% group_by(yards_to_goal) %>% 
+                                                                summarise("success" = mean(def_success, na.rm = TRUE)) %>% 
+                                                                filter(yards_to_goal > 2, yards_to_goal < 96)
+#navy def success rates per field position
+navy_def_success_rates <- pbp_2019_garbage_filtered %>% filter(defense_play == "Navy") %>% 
+                                                                group_by(yards_to_goal) %>% summarise("success" = mean(def_success, na.rm = TRUE)) %>% 
+                                                                filter(yards_to_goal > 2, yards_to_goal < 96)
+#byu def success rates per field position
+byu_def_success_rates <- pbp_2019_garbage_filtered %>% filter(defense_play == "BYU") %>% 
+                                                              group_by(yards_to_goal) %>% summarise("success" = mean(def_success, na.rm = TRUE)) %>% 
+                                                              filter(yards_to_goal > 2, yards_to_goal < 96)
+
+#fix navy and byu data for missing values
+#byu missing 94
+#navy missing 59, 95
+#could use an imputer in the future, but fixing one or two values is not difficult
+byu_def_success_rates <- rbind(byu_def_success_rates[1:91,], c(94, 0.0000), byu_def_success_rates[92,])
+navy_def_success_rates<- rbind(navy_def_success_rates[1:56,], c(59, 0.0000), navy_def_success_rates[57:91,], c(95, 0.0000))
+
+#combine to one data frame
+def_success_rates_field_pos <- data.frame("yards_to_go" = fbs_def_success_rates$yards_to_goal, 
+                                          "fbs_success" = fbs_def_success_rates$success, 
+                                          "byu_success" = byu_def_success_rates$success, 
+                                          "navy_success" = navy_def_success_rates$success)
+
+
+#graph defensive success rates per field position -- DEFENSE
+ggplot(data = def_success_rates_field_pos) +
+  scale_color_manual(values = byu_navy_success_field_pos_colors) +
+  geom_smooth(mapping = aes(x = yards_to_go, y = fbs_success, color = "FBS Average"), se = FALSE, size = 2) +
+  geom_smooth(mapping = aes(x = yards_to_go, y = navy_success, color = "BYU"), se = FALSE, size = 2) +
+  geom_smooth(mapping = aes(x = yards_to_go, y = byu_success, color = "Navy"), se = FALSE, size = 2) +
+  theme_bw() +
+  labs(color = "",
+       title = "2019 Defensive Success Rates by Field Position",
+       x = "Yards To Goal",
+       y = "Defensive Success Rate",
+       subtitle = "Success Rate: Allowing 40% or less of required yards on 1st down;\n50% or less of required yards on 2nd down; No conversion on 3rd/4th down",
+       caption = "Garbage Time Filtered  |  figure: @ndetorbal  |  data: @CFB_Data via @cfbscrapR") +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", 
+                                          size=0.25),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", 
+                                          size=0.25),
+        plot.caption.position = "plot") +
+  scale_x_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
+  ggsave(filename = "2019 Defensive Success Rates (BYUvNavy).png",
+         height = 5,
+         width = 9,
+         dpi = 300)
+
+```
+
+
